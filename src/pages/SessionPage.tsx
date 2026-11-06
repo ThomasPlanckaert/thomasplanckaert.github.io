@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import { ModeratorPanel } from "../features/session/components/ModeratorPanel";
 import { ParticipantList } from "../features/session/components/ParticipantList";
 import { VoteCard } from "../features/session/components/VoteCard";
+import { RoomTitle } from "../features/session/components/RoomTitle";
+import { SessionSummary } from "../features/session/components/SessionSummary";
 import { usePokerStore } from "../features/session/store/usePokerStore";
 import { Button } from "../shared/components/ui/button";
 import { Card } from "../shared/components/ui/card";
@@ -30,7 +32,7 @@ export function SessionPage({ admin }: { admin?: boolean }) {
   }, [state.darkMode]);
 
   useEffect(() => {
-    if (session && session.revealed && state.celebrationRound === session.round) {
+    if (session && session.revealed && !session.sessionEnded && state.celebrationRound === session.round) {
       confetti({ particleCount: 120, spread: 90, origin: { y: 0.6 } });
       toast.success("Consensus reached!", { description: "Everyone picked the same estimate." });
     }
@@ -53,7 +55,7 @@ export function SessionPage({ admin }: { admin?: boolean }) {
       <Card className="flex flex-wrap items-center justify-between gap-3 p-4 md:p-5">
         <div>
           <p className="text-xs uppercase tracking-wide text-slate-300">Round {session.round}</p>
-          <h1 className="text-2xl font-bold text-white">{session.title}</h1>
+          <RoomTitle title={session.title} editable={me.id === (session.creatorId ?? session.participants[0]?.id) && !session.sessionEnded} onSave={(title) => state.setTitle(sessionId, title)} />
           <p className="text-sm text-slate-300">{session.story}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -73,13 +75,14 @@ export function SessionPage({ admin }: { admin?: boolean }) {
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <section className="space-y-6">
           <Card className="p-5">
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-slate-300">{votedCount}/{session.participants.length} voted</p>
-              <div className="flex gap-2">
-                {me.isModerator && (
+              <div className="flex flex-wrap items-center gap-2">
+                {me.isModerator && !session.sessionEnded && (
                   <>
                     <Button size="sm" variant="secondary" onClick={() => state.clearVotes(sessionId)}>Reset</Button>
-                    <Button size="sm" onClick={reveal}>Reveal</Button>
+                    <Button variant="secondary" onClick={() => state.nextRound(sessionId)}>New Round</Button>
+                    <Button size="lg" className="min-w-32 text-base font-semibold" disabled={session.revealed} onClick={reveal}>Reveal</Button>
                   </>
                 )}
               </div>
@@ -88,9 +91,9 @@ export function SessionPage({ admin }: { admin?: boolean }) {
               {currentDeck.values.map((value) => (
                 <VoteCard
                   key={value}
-                  value={session.revealed ? value : "?"}
+                   value={value}
                   selected={session.votes[me.id] === value}
-                  disabled={session.revealed}
+                  disabled={session.revealed || session.sessionEnded}
                   onClick={() => state.castVote(sessionId, me.id, value)}
                 />
               ))}
@@ -101,12 +104,12 @@ export function SessionPage({ admin }: { admin?: boolean }) {
         </section>
 
         <section className="space-y-4">
-          {me.isModerator && admin && (
+          {me.isModerator && admin && !session.sessionEnded && (
             <ModeratorPanel
               me={me}
               session={session}
               decks={state.decks}
-              onTitle={(v) => state.setTitle(sessionId, v)}
+              onClose={() => navigate(`/session/${sessionId}`)}
               onStory={(v) => state.setStory(sessionId, v)}
               onDeck={(v) => state.setDeck(sessionId, v)}
               onReveal={reveal}
@@ -120,19 +123,22 @@ export function SessionPage({ admin }: { admin?: boolean }) {
           <Card className="p-4">
             <p className="mb-3 text-xs uppercase text-slate-400">Quick actions</p>
             <div className="grid gap-2">
-              {!admin && me.isModerator && (
-                <Button variant="secondary" onClick={() => navigate(`/session/${sessionId}/admin`)}>
-                  Open Moderator Dashboard
+              {me.isModerator && !session.sessionEnded && (
+                <Button variant="secondary" aria-expanded={Boolean(admin)} onClick={() => navigate(`/session/${sessionId}${admin ? "" : "/admin"}`)}>
+                  {admin ? "Close Moderator Dashboard" : "Open Moderator Dashboard"}
                 </Button>
               )}
-              <Button variant="ghost" onClick={() => state.nextRound(sessionId)}>New Round</Button>
+              {me.isModerator && !session.sessionEnded && <>
+                <Button variant="ghost" onClick={() => state.nextRound(sessionId)}>New Round</Button>
+                <Button variant="secondary" onClick={() => { if (window.confirm("End this session?")) state.endSession(sessionId); }}>End session</Button>
+              </>}
             </div>
           </Card>
         </section>
       </div>
 
       <AnimatePresence>
-        {session.revealed && state.celebrationRound === session.round && (
+        {session.revealed && !session.sessionEnded && state.celebrationRound === session.round && (
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -143,6 +149,7 @@ export function SessionPage({ admin }: { admin?: boolean }) {
           </motion.div>
         )}
       </AnimatePresence>
+      {session.sessionEnded && <SessionSummary session={session} onClose={() => navigate("/")} />}
     </main>
   );
 }

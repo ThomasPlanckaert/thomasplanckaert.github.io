@@ -17,6 +17,9 @@ export interface Participant {
 
 export interface PokerSession {
   id: string;
+  creatorId?: string;
+  sessionEnded?: boolean;
+  revealHistory?: { participantCount: number; votes: Record<string, string> }[];
   title: string;
   story: string;
   deckId: string;

@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { X } from "lucide-react";
 import { Button } from "../../../shared/components/ui/button";
 import { Card } from "../../../shared/components/ui/card";
 import { Input } from "../../../shared/components/ui/input";
@@ -9,7 +10,7 @@ interface ModeratorPanelProps {
   session: PokerSession;
   decks: Deck[];
   me: Participant;
-  onTitle: (value: string) => void;
+  onClose: () => void;
   onStory: (value: string) => void;
   onDeck: (value: string) => void;
   onReveal: () => void;
@@ -20,13 +21,15 @@ interface ModeratorPanelProps {
 }
 
 export function ModeratorPanel(props: ModeratorPanelProps) {
-  const { session, decks, onTitle, onStory, onDeck, onReveal, onClear, onNextRound, onRemove, onAddDeck } = props;
+  const { session, decks, onClose, onStory, onDeck, onReveal, onClear, onNextRound, onRemove, onAddDeck } = props;
 
   return (
     <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}>
       <Card className="space-y-4 p-5">
-        <p className="text-xs font-semibold uppercase tracking-wide text-violet-200">Moderator Controls</p>
-        <Input value={session.title} onChange={(e) => onTitle(e.target.value)} placeholder="Session title" />
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-violet-200">Moderator Controls</p>
+          <Button size="sm" variant="ghost" aria-label="Close moderator controls" onClick={onClose}><X size={18} /></Button>
+        </div>
         <Input value={session.story} onChange={(e) => onStory(e.target.value)} placeholder="Current story" />
         <select
           value={session.deckId}
@@ -42,7 +45,7 @@ export function ModeratorPanel(props: ModeratorPanelProps) {
 
         <div className="grid grid-cols-2 gap-2">
           <Button variant="secondary" onClick={onClear}>Reset Votes</Button>
-          <Button variant="secondary" onClick={onReveal}>Reveal</Button>
+          <Button size="lg" disabled={session.revealed} onClick={onReveal}>Reveal</Button>
           <Button className="col-span-2" onClick={onNextRound}>Start New Round</Button>
         </div>
 

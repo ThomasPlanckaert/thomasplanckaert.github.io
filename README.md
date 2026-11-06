@@ -8,7 +8,9 @@ A modern, frontend-only Planning Poker app built with Vite, React, TypeScript, T
 - Session and moderator routes (`/session/:sessionId` and `/session/:sessionId/admin`)
 - Moderator controls: reveal, reset, next round, story/title updates, deck switching, participant management
 - Planning poker voting behavior with hidden cards before reveal
-- Configurable decks (Fibonacci, T-shirt, sequential) + custom deck creation
+- Configurable decks (Modified Fibonacci by default, Fibonacci, T-shirt, sequential) + custom deck creation
+- Creator-only inline room naming and collapsible moderator controls
+- End-of-session summary with consensus totals and independently ranked matching pairs
 - LocalStorage persistence for sessions/decks/identity/theme
 - Consensus celebration with confetti + toast
 - Modern SaaS-like styling, subtle glassmorphism, smooth animations, dark mode

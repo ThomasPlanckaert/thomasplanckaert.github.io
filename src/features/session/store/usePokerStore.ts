@@ -25,6 +25,7 @@ interface PokerState {
   clearVotes: (sessionId: string) => void;
   revealVotes: (sessionId: string) => boolean;
   nextRound: (sessionId: string) => void;
+  endSession: (sessionId: string) => void;
   setActive: (sessionId: string, userId: string, active: boolean) => void;
   toggleTheme: () => void;
 }
@@ -75,6 +76,7 @@ export const usePokerStore = create<PokerState>()(
             ...state.sessions,
             [sessionId]: {
               ...session,
+              creatorId: session.creatorId ?? session.participants[0]?.id ?? userId,
               participants: [...session.participants, participant],
               votes: { ...session.votes, [userId]: null }
             }
@@ -88,9 +90,12 @@ export const usePokerStore = create<PokerState>()(
           sessions: { ...state.sessions, [sessionId]: { ...state.sessions[sessionId], story } }
         })),
       setTitle: (sessionId, title) =>
-        set((state) => ({
-          sessions: { ...state.sessions, [sessionId]: { ...state.sessions[sessionId], title } }
-        })),
+        set((state) => {
+          const session = state.sessions[sessionId];
+          const creatorId = session.creatorId ?? session.participants[0]?.id;
+          if (state.identities[sessionId] !== creatorId || session.sessionEnded || !title.trim() || title.trim().length > 200) return state;
+          return { sessions: { ...state.sessions, [sessionId]: { ...session, title: title.trim() } } };
+        }),
       setDeck: (sessionId, deckId) =>
         set((state) => ({
           sessions: {
@@ -122,7 +127,7 @@ export const usePokerStore = create<PokerState>()(
       castVote: (sessionId, userId, vote) =>
         set((state) => {
           const session = state.sessions[sessionId];
-          if (session.revealed) return state;
+          if (session.revealed || session.sessionEnded) return state;
           return {
             sessions: {
               ...state.sessions,
@@ -133,6 +138,7 @@ export const usePokerStore = create<PokerState>()(
       clearVotes: (sessionId) =>
         set((state) => {
           const session = state.sessions[sessionId];
+          if (session.sessionEnded) return state;
           return {
             sessions: {
               ...state.sessions,
@@ -147,6 +153,7 @@ export const usePokerStore = create<PokerState>()(
       revealVotes: (sessionId) => {
         const state = get();
         const session = state.sessions[sessionId];
+        if (session.revealed || session.sessionEnded) return false;
         const voteValues = Object.values(session.votes).filter((v): v is string => !!v);
         const everyoneVoted = voteValues.length === session.participants.length && voteValues.length > 0;
         const consensus = everyoneVoted && new Set(voteValues).size === 1;
@@ -154,7 +161,16 @@ export const usePokerStore = create<PokerState>()(
         set({
           sessions: {
             ...state.sessions,
-            [sessionId]: { ...session, revealed: true }
+            [sessionId]: {
+              ...session,
+              revealed: true,
+              revealHistory: [...(session.revealHistory ?? []), { participantCount: session.participants.length, votes: Object.fromEntries(
+                session.participants.flatMap((participant) => {
+                  const vote = session.votes[participant.id];
+                  return vote == null ? [] : [[participant.id, vote]];
+                })
+              ) }]
+            }
           },
           celebrationRound: consensus ? session.round : null
         });
@@ -164,6 +180,7 @@ export const usePokerStore = create<PokerState>()(
       nextRound: (sessionId) =>
         set((state) => {
           const session = state.sessions[sessionId];
+          if (session.sessionEnded) return state;
           return {
             celebrationRound: null,
             sessions: {
@@ -177,6 +194,12 @@ export const usePokerStore = create<PokerState>()(
             }
           };
         }),
+      endSession: (sessionId) => set((state) => {
+        const session = state.sessions[sessionId];
+        const me = session.participants.find((participant) => participant.id === state.identities[sessionId]);
+        if (!me?.isModerator) return state;
+        return { celebrationRound: null, sessions: { ...state.sessions, [sessionId]: { ...session, sessionEnded: true } } };
+      }),
       setActive: (sessionId, userId, active) =>
         set((state) => ({
           sessions: {
@@ -191,6 +214,16 @@ export const usePokerStore = create<PokerState>()(
         })),
       toggleTheme: () => set((state) => ({ darkMode: !state.darkMode }))
     }),
-    { name: "planning-poker-state" }
+    {
+      name: "planning-poker-state",
+      merge: (persistedState, currentState) => {
+        const saved = persistedState as Partial<PokerState> | undefined;
+        return {
+          ...currentState,
+          ...saved,
+          decks: [...defaultDecks, ...(saved?.decks ?? []).filter((deck) => !defaultDecks.some((builtIn) => builtIn.id === deck.id))]
+        };
+      }
+    }
   )
 );
