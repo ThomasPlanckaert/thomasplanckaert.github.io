@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ModeratorPanel } from "../features/session/components/ModeratorPanel";
 import { ParticipantList } from "../features/session/components/ParticipantList";
 import { RoundAnnouncement } from "../features/session/components/RoundAnnouncement";
+import { RoomTitle } from "../features/session/components/RoomTitle";
 import { SessionEndedOverlay } from "../features/session/components/SessionEndedOverlay";
 import { VoteCard } from "../features/session/components/VoteCard";
 import { usePokerStore } from "../features/session/store/usePokerStore";
@@ -148,6 +149,7 @@ export function SessionPage({ admin }: { admin?: boolean }) {
     session?.revealed,
     session?.round,
     session?.consensusStreak,
+    session?.sessionEnded,
     session?.participants,
     session?.votes,
     showConsensus,
@@ -211,7 +213,7 @@ export function SessionPage({ admin }: { admin?: boolean }) {
               </span>
             )}
           </p>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{session.title}</h1>
+          <RoomTitle title={session.title} editable={me.id === session.creatorId && !sessionEnded} onSave={setTitle} />
           {session.story ? (
             <p className="text-sm text-slate-600 dark:text-slate-300">{session.story}</p>
           ) : null}
@@ -260,13 +262,16 @@ export function SessionPage({ admin }: { admin?: boolean }) {
                   </p>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {me.isModerator && !sessionEnded && (
                   <>
                     <Button size="sm" variant="secondary" onClick={() => clearVotes()}>
                       Reset
                     </Button>
-                    <Button size="sm" onClick={reveal}>
+                    <Button variant="secondary" onClick={() => nextRound()}>
+                      New Round
+                    </Button>
+                    <Button size="lg" className="min-w-32 text-base font-semibold" disabled={session.revealed} onClick={reveal}>
                       Reveal
                     </Button>
                   </>
@@ -306,7 +311,7 @@ export function SessionPage({ admin }: { admin?: boolean }) {
               me={me}
               session={session}
               decks={ui.decks}
-              onTitle={(v) => setTitle(v)}
+              onClose={() => navigate(`/session/${session.id}`)}
               onStory={(v) => setStory(v)}
               onDeck={(v) => setDeck(v)}
               onReveal={reveal}
@@ -348,12 +353,13 @@ export function SessionPage({ admin }: { admin?: boolean }) {
                   placeholder="Your name"
                 />
               </div>
-              {!admin && me.isModerator && (
+              {me.isModerator && !sessionEnded && (
                 <Button
                   variant="secondary"
-                  onClick={() => navigate(`/session/${session.id}/admin`)}
+                  aria-expanded={Boolean(admin)}
+                  onClick={() => navigate(`/session/${session.id}${admin ? "" : "/admin"}`)}
                 >
-                  Open Moderator Dashboard
+                  {admin ? "Close Moderator Dashboard" : "Open Moderator Dashboard"}
                 </Button>
               )}
               {me.isModerator && !sessionEnded && (

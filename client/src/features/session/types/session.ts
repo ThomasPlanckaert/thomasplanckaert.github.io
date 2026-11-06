@@ -17,6 +17,7 @@ export interface Participant {
 
 export interface PokerSession {
   id: string;
+  creatorId: string;
   title: string;
   story: string;
   deckId: string;

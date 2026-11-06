@@ -5,6 +5,7 @@ export interface FirestoreSession {
   roomCode: string;
   title: string;
   moderatorUid: string;
+  creatorUid?: string;
   currentStory: string;
   cardSet: string[];
   revealed: boolean;

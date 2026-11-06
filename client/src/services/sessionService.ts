@@ -54,6 +54,7 @@ export async function createSession(username: string): Promise<string> {
     roomCode: code,
     title: "Sprint Planning",
     moderatorUid: uid,
+    creatorUid: uid,
     currentStory: "",
     cardSet: [...DEFAULT_CARD_SET],
     revealed: false,

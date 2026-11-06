@@ -16,44 +16,47 @@ function participantMap(participants: Participant[]): Map<string, Participant> {
   return new Map(participants.map((p) => [p.id, p]));
 }
 
-function connectedComponents(adjacency: Map<string, Set<string>>): string[][] {
-  const visited = new Set<string>();
-  const components: string[][] = [];
-
-  for (const start of adjacency.keys()) {
-    if (visited.has(start)) continue;
-
-    const component: string[] = [];
-    const stack = [start];
-
-    while (stack.length > 0) {
-      const id = stack.pop()!;
-      if (visited.has(id)) continue;
-      visited.add(id);
-      component.push(id);
-
-      for (const neighbor of adjacency.get(id) ?? []) {
-        if (!visited.has(neighbor)) stack.push(neighbor);
-      }
+function fullyConnectedGroups(adjacency: Map<string, Set<string>>): string[][] {
+  const groups: string[][] = [];
+  // Maximal cliques: every member must have a top-scoring match with every other member.
+  function visit(group: string[], candidates: Set<string>, excluded: Set<string>) {
+    if (candidates.size === 0 && excluded.size === 0) {
+      if (group.length >= 2) groups.push(group);
+      return;
     }
-
-    if (component.length > 0) components.push(component);
+    const pivot = [...candidates, ...excluded].sort((a, b) =>
+      [...candidates].filter((id) => adjacency.get(b)?.has(id)).length -
+      [...candidates].filter((id) => adjacency.get(a)?.has(id)).length
+    )[0];
+    for (const id of [...candidates].filter((id) => !adjacency.get(pivot)?.has(id))) {
+      const neighbors = adjacency.get(id)!;
+      visit(
+        [...group, id],
+        new Set([...candidates].filter((candidate) => neighbors.has(candidate))),
+        new Set([...excluded].filter((candidate) => neighbors.has(candidate)))
+      );
+      candidates.delete(id);
+      excluded.add(id);
+    }
   }
-
-  return components;
+  visit([], new Set(adjacency.keys()), new Set());
+  return groups;
 }
 
 function groupsFromPairCounts(
   participants: Participant[],
   pairCounts: Record<string, number>
 ): Participant[][] {
-  const pairs = Object.entries(pairCounts);
+  const byId = participantMap(participants);
+  const pairs = Object.entries(pairCounts).filter(([key, count]) => {
+    const ids = key.split("|");
+    return ids.length === 2 && ids[0] !== ids[1] && ids.every((id) => byId.has(id)) && count > 0;
+  });
   if (pairs.length === 0) return [];
 
   const maxPairCount = Math.max(...pairs.map(([, count]) => count));
   if (maxPairCount === 0) return [];
 
-  const byId = participantMap(participants);
   const adjacency = new Map<string, Set<string>>();
 
   for (const [key, count] of pairs) {
@@ -67,23 +70,12 @@ function groupsFromPairCounts(
     adjacency.get(b)!.add(a);
   }
 
-  return connectedComponents(adjacency)
+  return fullyConnectedGroups(adjacency)
     .map((uids) =>
       uids.map((id) => byId.get(id)).filter((p): p is Participant => p != null)
     )
     .filter((group) => group.length > 0)
     .sort((a, b) => b.length - a.length);
-}
-
-function groupsFromMatchCounts(
-  participants: Participant[],
-  matchCounts: Record<string, number>
-): Participant[][] {
-  const max = Math.max(...participants.map((p) => matchCounts[p.id] ?? 0));
-  if (max === 0) return [];
-
-  const leaders = participants.filter((p) => (matchCounts[p.id] ?? 0) === max);
-  return leaders.length > 0 ? [leaders] : [];
 }
 
 export function computeSyncLeaders(
@@ -95,9 +87,7 @@ export function computeSyncLeaders(
     return { mostInSyncGroups: [], leastInSync: [] };
   }
 
-  const pairGroups = groupsFromPairCounts(participants, pairCounts);
-  const mostInSyncGroups =
-    pairGroups.length > 0 ? pairGroups : groupsFromMatchCounts(participants, matchCounts);
+  const mostInSyncGroups = groupsFromPairCounts(participants, pairCounts);
 
   const mostInSyncIds = new Set(mostInSyncGroups.flat().map((p) => p.id));
   const scored = participants.map((p) => ({
@@ -113,10 +103,6 @@ export function computeSyncLeaders(
     leastInSync = scored
       .filter((s) => s.count === min && !mostInSyncIds.has(s.participant.id))
       .map((s) => s.participant);
-  }
-
-  if (leastInSync.length === 0 && min < max) {
-    leastInSync = scored.filter((s) => s.count === min).map((s) => s.participant);
   }
 
   return { mostInSyncGroups, leastInSync };

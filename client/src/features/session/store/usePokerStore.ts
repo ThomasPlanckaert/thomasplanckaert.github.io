@@ -32,6 +32,17 @@ export const usePokerStore = create<PokerState>()(
     }),
     {
       name: "planning-poker-ui",
+      merge: (persistedState, currentState) => {
+        const saved = persistedState as Partial<PokerState> | undefined;
+        return {
+          ...currentState,
+          ...saved,
+          decks: [
+            ...defaultDecks,
+            ...(saved?.decks ?? []).filter((deck) => !defaultDecks.some((builtIn) => builtIn.id === deck.id))
+          ]
+        };
+      },
       partialize: (state) => ({
         decks: state.decks,
         darkMode: state.darkMode,

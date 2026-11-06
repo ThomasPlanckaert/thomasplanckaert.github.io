@@ -154,7 +154,7 @@ export function SessionEndedOverlay({
   }, []);
 
   const leastInSyncGroups =
-    syncLeaders.leastInSync.length > 0 ? [syncLeaders.leastInSync] : [];
+    syncLeaders.leastInSync.map((participant) => [participant]);
 
   return (
     <motion.div
@@ -180,13 +180,18 @@ export function SessionEndedOverlay({
             groups={syncLeaders.mostInSyncGroups}
             variant="sync"
           />
+          {syncLeaders.mostInSyncGroups.length > 0 && (
+            <p className="text-xs text-slate-400">
+              Every pair in a group shares the highest number of matching reveals. Tied groups can overlap.
+            </p>
+          )}
           <SyncSection
-            title="Least in sync"
+            title="Fewest reveals matching someone else"
             groups={leastInSyncGroups}
             variant="out-of-sync"
           />
           {syncLeaders.mostInSyncGroups.length === 0 && leastInSyncGroups.length === 0 && (
-            <p className="text-center text-sm text-slate-400">No reveal rounds recorded yet.</p>
+            <p className="text-center text-sm text-slate-400">No matching votes recorded for these participants.</p>
           )}
         </div>
 

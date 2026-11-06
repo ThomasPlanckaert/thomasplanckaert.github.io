@@ -43,6 +43,7 @@ export function mapFirestoreToPokerSession(
 
   const pokerSession: PokerSession = {
     id: session.roomCode,
+    creatorId: session.creatorUid ?? session.moderatorUid,
     title: session.title,
     story: session.currentStory,
     deckId,

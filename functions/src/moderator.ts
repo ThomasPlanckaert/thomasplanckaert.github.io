@@ -33,51 +33,7 @@ async function assertModerator(roomCode: string, uid: string) {
   return { code, data, ref: snap.ref };
 }
 
-async function loadVotesAndParticipants(code: string) {
-  const db = getAdminDb();
-  const [participantsSnap, votesSnap] = await Promise.all([
-    db.collection(`sessions/${code}/participants`).get(),
-    db.collection(`sessions/${code}/votes`).get()
-  ]);
-
-  const participants = participantsSnap.docs.map((doc) => {
-    const d = doc.data();
-    const lastSeenMs =
-      d.lastSeen && typeof d.lastSeen.toMillis === "function" ? d.lastSeen.toMillis() : null;
-    return { uid: doc.id, lastSeenMs };
-  });
-
-  const votes = votesSnap.docs.map((doc) => ({
-    participantId: doc.id,
-    value: doc.data().value as string
-  }));
-
-  return { participants, votes };
-}
-
-async function applyConsensus(
-  code: string,
-  revealed: boolean,
-  round: number,
-  previousStreak: number
-) {
-  const { participants, votes } = await loadVotesAndParticipants(code);
-  const result = evaluateConsensus({ revealed, participants, votes });
-
-  const nextStreak = result.reached ? previousStreak + 1 : 0;
-
-  await sessionRef(code).update({
-    consensusReached: result.reached,
-    consensusRound: result.reached ? round : null,
-    consensusVote: result.reached ? result.vote : null,
-    consensusStreak: nextStreak
-  });
-
-  return { ...result, streak: nextStreak };
-}
-
-async function updateRevealStats(
-  code: string,
+function buildRevealStats(
   sessionData: FirebaseFirestore.DocumentData,
   consensusReached: boolean,
   votes: Array<{ participantId: string; value: string }>
@@ -110,7 +66,7 @@ async function updateRevealStats(
     updates.statsCloseOnes = FieldValue.increment(1);
   }
 
-  await sessionRef(code).update(updates);
+  return updates;
 }
 
 export async function handleRevealVotes(request: CallableRequest) {
@@ -118,17 +74,41 @@ export async function handleRevealVotes(request: CallableRequest) {
   const roomCode = request.data?.roomCode as string | undefined;
   if (!roomCode) throw new HttpsError("invalid-argument", "roomCode is required.");
 
-  const { code, data, ref } = await assertModerator(roomCode, uid);
-  const round = (data.round as number) ?? 1;
-  const previousStreak = (data.consensusStreak as number) ?? 0;
+  const code = normalizeRoomCode(roomCode);
+  const ref = sessionRef(code);
+  const db = getAdminDb();
+  return db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(ref);
+    if (!snap.exists) throw new HttpsError("not-found", "Room not found.");
+    const data = snap.data()!;
+    if (data.moderatorUid !== uid) {
+      throw new HttpsError("permission-denied", "Only the moderator can perform this action.");
+    }
+    if (data.sessionEnded) throw new HttpsError("failed-precondition", "Session has ended.");
+    if (data.revealed) return { ok: true };
 
-  const { votes } = await loadVotesAndParticipants(code);
-
-  await ref.update({ revealed: true });
-  const consensus = await applyConsensus(code, true, round, previousStreak);
-  await updateRevealStats(code, data, consensus.reached, votes);
-
-  return { ok: true, consensus };
+    const participantsSnap = await transaction.get(db.collection(`sessions/${code}/participants`));
+    const votesSnap = await transaction.get(db.collection(`sessions/${code}/votes`));
+    const participants = participantsSnap.docs.map((doc) => {
+      const lastSeen = doc.data().lastSeen;
+      return { uid: doc.id, lastSeenMs: lastSeen?.toMillis?.() ?? null };
+    });
+    const participantIds = new Set(participants.map((participant) => participant.uid));
+    const votes = votesSnap.docs
+      .filter((doc) => participantIds.has(doc.id))
+      .map((doc) => ({ participantId: doc.id, value: doc.data().value as string }));
+    const consensus = evaluateConsensus({ revealed: true, participants, votes });
+    const streak = consensus.reached ? ((data.consensusStreak as number) ?? 0) + 1 : 0;
+    transaction.update(ref, {
+      revealed: true,
+      consensusReached: consensus.reached,
+      consensusRound: consensus.reached ? data.round : null,
+      consensusVote: consensus.reached ? consensus.vote : null,
+      consensusStreak: streak,
+      ...buildRevealStats(data, consensus.reached, votes)
+    });
+    return { ok: true, consensus: { ...consensus, streak } };
+  });
 }
 
 export async function handleResetVotes(request: CallableRequest) {
@@ -161,18 +141,28 @@ export async function handleUpdateSessionSettings(request: CallableRequest) {
   const roomCode = request.data?.roomCode as string | undefined;
   if (!roomCode) throw new HttpsError("invalid-argument", "roomCode is required.");
 
-  const { code, ref } = await assertModerator(roomCode, uid);
   const title = request.data?.title as string | undefined;
   const currentStory = request.data?.currentStory as string | undefined;
   const cardSet = request.data?.cardSet as string[] | undefined;
+  const code = normalizeRoomCode(roomCode);
+  const ref = sessionRef(code);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Room not found.");
+  const data = snap.data()!;
+  if (title !== undefined && (data.creatorUid ?? data.moderatorUid) !== uid) {
+    throw new HttpsError("permission-denied", "Only the room creator can rename this room.");
+  }
+  if ((currentStory !== undefined || cardSet !== undefined) && data.moderatorUid !== uid) {
+    throw new HttpsError("permission-denied", "Only the moderator can perform this action.");
+  }
 
   const updates: Record<string, unknown> = {};
 
   if (title !== undefined) {
-    if (typeof title !== "string" || title.length > 200) {
+    if (typeof title !== "string" || !title.trim() || title.trim().length > 200) {
       throw new HttpsError("invalid-argument", "Invalid title.");
     }
-    updates.title = title;
+    updates.title = title.trim();
   }
 
   if (currentStory !== undefined) {
@@ -243,7 +233,7 @@ export async function handleTransferModerator(request: CallableRequest) {
     throw new HttpsError("invalid-argument", "roomCode and newModeratorUid are required.");
   }
 
-  const { code, ref } = await assertModerator(roomCode, uid);
+  const { code, data, ref } = await assertModerator(roomCode, uid);
   const db = getAdminDb();
   const newModRef = db.doc(`sessions/${code}/participants/${newModeratorUid}`);
   const newModSnap = await newModRef.get();
@@ -252,7 +242,7 @@ export async function handleTransferModerator(request: CallableRequest) {
   }
 
   const batch = db.batch();
-  batch.update(ref, { moderatorUid: newModeratorUid });
+  batch.update(ref, { moderatorUid: newModeratorUid, creatorUid: data.creatorUid ?? uid });
   batch.update(db.doc(`sessions/${code}/participants/${uid}`), { isModerator: false });
   batch.update(newModRef, { isModerator: true });
   await batch.commit();

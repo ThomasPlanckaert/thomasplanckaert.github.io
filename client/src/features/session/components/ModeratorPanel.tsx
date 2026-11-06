@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import { X } from "lucide-react";
 import { Button } from "../../../shared/components/ui/button";
 import { Card } from "../../../shared/components/ui/card";
 import { Input } from "../../../shared/components/ui/input";
@@ -10,7 +11,7 @@ interface ModeratorPanelProps {
   session: PokerSession;
   decks: Deck[];
   me: Participant;
-  onTitle: (value: string) => void;
+  onClose: () => void;
   onStory: (value: string) => void;
   onDeck: (value: string) => void;
   onReveal: () => void;
@@ -25,7 +26,7 @@ export function ModeratorPanel(props: ModeratorPanelProps) {
   const {
     session,
     decks,
-    onTitle,
+    onClose,
     onStory,
     onDeck,
     onReveal,
@@ -36,22 +37,12 @@ export function ModeratorPanel(props: ModeratorPanelProps) {
     onAddDeck
   } = props;
 
-  const [title, setTitle] = useState(session.title);
   const [story, setStory] = useState(session.story);
-  const titleFocused = useRef(false);
   const storyFocused = useRef(false);
-
-  useEffect(() => {
-    if (!titleFocused.current) setTitle(session.title);
-  }, [session.title]);
 
   useEffect(() => {
     if (!storyFocused.current) setStory(session.story);
   }, [session.story]);
-
-  const commitTitle = () => {
-    if (title !== session.title) onTitle(title);
-  };
 
   const commitStory = () => {
     if (story !== session.story) onStory(story);
@@ -65,21 +56,14 @@ export function ModeratorPanel(props: ModeratorPanelProps) {
   return (
     <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}>
       <Card className="space-y-4 p-5">
-        <p className="text-xs font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-200">
-          Moderator Controls
-        </p>
-        <Input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onFocus={() => {
-            titleFocused.current = true;
-          }}
-          onBlur={() => {
-            titleFocused.current = false;
-            commitTitle();
-          }}
-          placeholder="Session title"
-        />
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-200">
+            Moderator Controls
+          </p>
+          <Button size="sm" variant="ghost" aria-label="Close moderator controls" onClick={onClose}>
+            <X size={18} />
+          </Button>
+        </div>
         <Input
           value={story}
           onChange={(e) => setStory(e.target.value)}
@@ -115,7 +99,7 @@ export function ModeratorPanel(props: ModeratorPanelProps) {
           <Button variant="secondary" onClick={onClear}>
             Reset Votes
           </Button>
-          <Button variant="secondary" onClick={onReveal}>
+          <Button size="lg" disabled={session.revealed} onClick={onReveal}>
             Reveal
           </Button>
           <Button className="col-span-2" onClick={onNextRound}>

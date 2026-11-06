@@ -47,6 +47,7 @@ service cloud.firestore {
       // Room creation: creator becomes moderator; moderatorUid cannot be forged
       allow create: if isSignedIn()
         && request.resource.data.moderatorUid == request.auth.uid
+        && (!('creatorUid' in request.resource.data) || request.resource.data.creatorUid == request.auth.uid)
         && request.resource.data.roomCode == sessionId
         && request.resource.data.revealed == false
         && request.resource.data.round >= 1

@@ -7,6 +7,7 @@
     "functions"
   ],
   "scripts": {
+    "test": "npm run build:functions && node --experimental-strip-types --test tests/*.test.mjs",
     "dev": "npm run dev -w @planning-poker/client",
     "build": "npm run build -w @planning-poker/functions && npm run build -w @planning-poker/client",
     "build:client": "npm run build -w @planning-poker/client",
