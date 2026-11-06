@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Sparkles } from "lucide-react";
 import { Button } from "../shared/components/ui/button";
 import { Card } from "../shared/components/ui/card";
@@ -10,9 +10,11 @@ import { generateRoomCode } from "../firebase/firestore";
 
 export function LandingPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const invitedRoomCode = searchParams.get("roomCode");
   const stored = loadIdentity();
   const [username, setUsername] = useState(stored.username ?? "");
-  const [roomCode, setRoomCode] = useState(stored.roomCode ?? generateRoomCode());
+  const [roomCode, setRoomCode] = useState(() => invitedRoomCode ?? stored.roomCode ?? generateRoomCode());
   const { createRoom, joinRoom, connecting } = useSession(undefined, {
     autoReconnect: false
   });
@@ -24,10 +26,10 @@ export function LandingPage() {
   );
 
   useEffect(() => {
-    if (stored.roomCode && stored.username) {
+    if (!invitedRoomCode && stored.roomCode && stored.username) {
       navigate(`/session/${stored.roomCode.toUpperCase()}`);
     }
-  }, [navigate, stored.roomCode, stored.username]);
+  }, [navigate, invitedRoomCode, stored.roomCode, stored.username]);
 
   const enter = async (asModerator: boolean) => {
     if (!canContinue || !normalizedCode) return;

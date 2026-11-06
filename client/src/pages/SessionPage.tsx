@@ -86,7 +86,7 @@ export function SessionPage({ admin }: { admin?: boolean }) {
 
   useEffect(() => {
     if (!connecting && !session && sessionId) {
-      const timer = setTimeout(() => navigate("/"), 1500);
+      const timer = setTimeout(() => navigate(`/?roomCode=${encodeURIComponent(sessionId)}`, { replace: true }), 1500);
       return () => clearTimeout(timer);
     }
   }, [session, connecting, sessionId, navigate]);

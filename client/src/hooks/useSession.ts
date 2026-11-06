@@ -139,6 +139,7 @@ export function useSession(
 
     const stored = loadIdentity();
     if (stored.roomCode?.toUpperCase() !== roomCode.toUpperCase() || !stored.username) {
+      navigate(`/?roomCode=${encodeURIComponent(roomCode)}`, { replace: true });
       return;
     }
 
@@ -149,7 +150,7 @@ export function useSession(
       .joinSession(roomCode, stored.username)
       .catch((err) => {
         toast.error(err instanceof Error ? err.message : "Failed to rejoin room");
-        navigate("/");
+        navigate(`/?roomCode=${encodeURIComponent(roomCode)}`, { replace: true });
       })
       .finally(() => setConnecting(false));
   }, [roomCode, options?.autoReconnect, authReady, navigate]);
@@ -167,7 +168,7 @@ export function useSession(
   }, [firestoreSession, decks, setSelectedDeckId]);
 
   const mapped = useMemo(() => {
-    if (!firestoreSession || !myUid) return null;
+    if (!firestoreSession || !myUid || !participants.some((participant) => participant.uid === myUid)) return null;
     return mapFirestoreToPokerSession(
       firestoreSession,
       participants,
